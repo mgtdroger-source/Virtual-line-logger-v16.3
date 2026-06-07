@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual line logger V1</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; color: #333; margin: 0; padding: 15px; font-size: 14px; }
+        .card { background: #ffffff; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #e4e7eb; }
+        h1 { font-size: 1.5rem; font-weight: bold; color: #0d3c61; margin: 0 0 5px 0; }
+        h2 { font-size: 1.2rem; font-weight: bold; color: #0d3c61; margin: 0 0 10px 0; }
+        p { font-size: 0.9rem; color: #666; margin: 0 0 15px 0; line-height: 1.4; }
+        .btn-row { display: flex; gap: 15px; margin-bottom: 15px; }
+        button { flex: 1; background: #0f3c66; color: white; border: none; padding: 14px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1rem; transition: background 0.2s; }
+        button:active { background: #0a2947; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .status-text { font-weight: bold; color: #d97706; margin-bottom: 15px; font-size: 0.95rem; }
+        
+        /* Clean Input Layout */
+        .edit-row { background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 15px; }
+        .input-fields { display: flex; gap: 15px; margin-bottom: 12px; width: 100%; }
+        .edit-group { display: flex; flex-direction: column; }
+        .edit-group.coords { flex: 1; }      
+        .edit-group.angle { width: 90px; flex: none; } 
+        
+        .edit-group label { font-size: 0.75rem; font-weight: bold; color: #475569; margin-bottom: 4px; text-transform: uppercase; }
+        .edit-group input { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-family: monospace; font-size: 0.9rem; background: #fff; color: #1e293b; width: 100%; box-sizing: border-box; height: 36px; }
+        
+        #btnApplyManual { background: #64748b; font-size: 0.85rem; padding: 10px; border-radius: 6px; width: 100%; height: auto; display: block; margin-top: 5px; }
+        #btnApplyManual:active { background: #475569; }
+
+        /* Clean Tabular Data Box View */
+        .data-table { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #fff; }
+        .data-row { display: flex; justify-content: space-between; padding: 10px 15px; border-bottom: 1px solid #f1f5f9; align-items: center; }
+        .data-row:last-child { border-bottom: none; }
+        .data-label { color: #64748b; font-size: 0.9rem; }
+        .data-value { font-weight: bold; font-family: monospace; font-size: 0.95rem; color: #1e293b; }
+        
+        /* Validation monitors */
+        #btnMark { background: #d97706; color: white; font-size: 1.3rem; padding: 20px; width: 100%; margin: 15px 0; border-radius: 8px; box-shadow: 0 4px 10px rgba(217,119,6,0.15); }
+        #btnMark:active { background: #b45309; }
+        .log-box { max-height: 120px; overflow-y: auto; font-family: monospace; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 0.85rem; margin-top: 10px; }
+        .log-item { padding: 5px 0; border-bottom: 1px solid #f1f5f9; }
+    </style>
+</head>
+<body>
+
+    <!-- OVERVIEW INFO CARD -->
+    <div class="card">
+        <h1>Virtual line logger V1</h1>
+        <p>Line Crossing Timing Prototype.<br>Capture stationary anchor Center Point A, then walk 30 paces to gain the track orientation heading angle. High-precision 6-point regression maps the cross vector.</p>
+    </div>
+
+    <!-- 1. TIMING LINE CONTROL SECTION -->
+    <div class="card">
+        <h2>1. Timing Line</h2>
+        <p>Stand precisely at road center to log Point A. Once the alert transitions to walk, step out 30 paces down the track vector and lock the heading angle.</p>
+        
+        <div class="btn-row">
+            <button id="btnCaptureA">Capture Point A</button>
+            <button id="btnCaptureAngle" disabled>Capture Walk Angle</button>
+        </div>
+
+        <div id="lineStatus" class="status-text">Line not ready</div>
+
+        <!-- TWO PILL MANUAL ENTRY FIELD OVERRIDES -->
+        <div class="edit-row">
+            <div class="input-fields">
+                <div class="edit-group coords">
+                    <label for="inputCoords">GPS Center Coordinate</label>
+                    <input type="text" id="inputCoords" placeholder="Latitude, Longitude">
+                </div>
+                <div class="edit-group angle">
+                    <label for="inputAngle">Angle</label>
+                    <input type="number" id="inputAngle" placeholder="0-360" min="0" max="360" step="any">
+                </div>
+            </div>
+            <button id="btnApplyManual">Apply Manual Field Changes</button>
+        </div>
+
+        <!-- TABULAR DATA VIEW SHEET GRID -->
+        <div class="data-table">
+            <div class="data-row"><span class="data-label">A Samples</span><span id="lblSamples" class="data-value">0 / 20</span></div>
+            <div class="data-row"><span class="data-label">A Accuracy</span><span id="lblAccA" class="data-value">--</span></div>
+            <div class="data-row"><span class="data-label">A Lat/Lon</span><span id="lblCoordsA" class="data-value">--</span></div>
+            <div class="data-row"><span class="data-label">Derived Angle</span><span id="lblHeading" class="data-value">--°</span></div>
+            <div class="data-row" style="background: #f8fafc;"><span class="data-label">Gate End A Lat/Lon</span><span id="lblGateA" class="data-value" style="color:#0f3c66;">--</span></div>
+            <div class="data-row" style="background: #f8fafc;"><span class="data-label">Gate End B Lat/Lon</span><span id="lblGateB" class="data-value" style="color:#0f3c66;">--</span></div>
+            <div class="data-row"><span class="data-label">Live Accuracy</span><span id="lblLiveAcc" class="data-value">--</span></div>
+            <div class="data-row"><span class="data-label">Live Lat/Lon</span><span id="lblLiveCoords" class="data-value">--</span></div>
+            <div class="data-row"><span class="data-label">Settle Timer</span><span id="lblTimer" class="data-value">--</span></div>
+        </div>
+    </div>
+
+    <!-- 2. TRACKING AND VALIDATION SECTION -->
+    <div class="card">
+        <h2>2. Live Timing Verification</h2>
+        <button id="btnTracking" style="background: #10b981;">Start GPS Tracking Loop</button>
+        
+        <button id="btnMark">MARK LINE NOW</button>
+
+        <div class="data-table">
+            <div class="data-row"><span class="data-label">Manual Button Time</span><span id="valBtnTime" class="data-value" style="color:#d97706;">00:00.000</span></div>
+            <div class="data-row"><span class="data-label">Calculated GPS Time</span><span id="valGpsTime" class="data-value" style="color:#10b981;">waiting...</span></div>
+            <div class="data-row"><span class="data-label">Variance Error Difference</span><span id="valDiff" class="data-value">--</span></div>
+        </div>
+
+        <div class="log-box" id="runLog">
+            <div style="color:#94a3b8; font-style:italic;">No test run logs saved yet.</div>
+        </div>
+        <button id="btnClearLog" style="background:#ef4444; font-size:0.85rem; padding:6px; margin-top:10px;">Clear Audit History</button>
+    </div>
+
+    <script>
+        // System Core Simple Global Arrays
+        let waypoint = null; 
+        let startCoordinate = null;
+        let isSettlePhase = false;
+        let isWalkPhase = false;
+        let setupWatchId = null;
+        let qualityBuffer = [];
+        
+        let isTracking = false;
+        let watchId = null;
+        let raceStartCpuTime = null;
+        let buttonElapsed = null;
+        let liveTrackingBuffer = [];
+        const MIN_DISTANCE_M = 5;
+
+        // Monotonic Stopwatch Math
+        function getElapsedMs() {
+            if (raceStartCpuTime === null) raceStartCpuTime = performance.now();
+            return performance.now() - raceStartCpuTime;
+        }
+        function formatElapsed(totalMs) {
+            if (!totalMs) return "00:00.000";
+            let totalSeconds = totalMs / 1000;
+            let minutes = Math.floor(totalSeconds / 60);
+            let seconds = Math.floor(totalSeconds % 60);
+            let mms = Math.floor(totalMs % 1000);
+            return `${minutes.toString().padStart(2,'0')}:${seconds.toString().padStart(2,'0')}.${mms.toString().padStart(3,'0')}`;
+        }
+
+        // Distance Calculator (Haversine Formula)
+        function getDistanceMeters(lat1, lon1, lat2, lon2) {
+            const R = 6371000;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+
+        // Project Perpendicular Gate Strings (60m Wide Total Tripwire)
+        function generateMathematicalGateLines(lat, lon, roadHeading) {
+            const extensionMeters = 30;
+            const angleLeft = ((roadHeading - 90) * Math.PI) / 180;
+            const angleRight = ((roadHeading + 90) * Math.PI) / 180;
+            const latDegLen = 111132.92;
+            const lonDegLen = 111412.84 * Math.cos(lat * Math.PI / 180);
+            return {
+                A: { lat: lat + (extensionMeters * Math.cos(angleLeft)) / latDegLen, lon: lon + (extensionMeters * Math.sin(angleLeft)) / lonDegLen },
+                B: { lat: lat + (extensionMeters * Math.cos(angleRight)) / latDegLen, lon: lon + (extensionMeters * Math.sin(angleRight)) / lonDegLen }
+            };
+        }
+
+        function commitLineGeneration(lat, lon, heading) {
